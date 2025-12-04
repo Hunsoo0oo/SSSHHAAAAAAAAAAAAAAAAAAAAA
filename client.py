@@ -5,6 +5,7 @@ from typing import Union
 #from os.path import json
 import time
 import random
+import re
 
 
 class Item(BaseModel):
@@ -27,17 +28,15 @@ def send_get(url):
 def reg_user():
     email = input("Email:")
     login = input("Логин:")
-    password = input("Пароль:")
-    password_confirmation = input("Подтвердите пароль:")
-    if password == password_confirmation:  
-        user = {"login": login, "email": email, "password": password}
-        response = requests.post("http://127.0.0.1:8000/users/", json=user)
-        if response.status_code == 200:
-            print("Пользователь зарегистрирован")
-        else:
-            print("Ошибка регистрации")
+    password = pass_check()
+    user = {"login": login, "email": email, "password": password}
+    response = requests.post("http://127.0.0.1:8000/users/", json=user)
+    if response.status_code == 200:
+        print("Пользователь зарегистрирован")
+    elif response.status_code == 409:
+        print("Логин уже занят")
     else:
-        print("Пароли не совпадают")
+        print("Ошибка регистрации")
 
 
 def auth_user():
@@ -49,8 +48,10 @@ def auth_user():
         data = response.json()
         Token = data["Token"]
         print("Авторизация прошла успешно")
-    else:
+    elif response.status_code == 401:
         print("Неверный логин или пароль")
+    else:
+        print(f" Ошибка {response.status_code}")
 
     
 
@@ -63,12 +64,43 @@ def all_items():
                 item =  Item(**json_item)
                 if (item.description != None):
                     print(item)
+        case 400:
+            print("Сервер не смог обработать запрос из-за синтаксической ошибки или неправильного формата данных.")
         case 401:
             print("Неверные авторизационные данные")
         case 403:
             print("Доступ ограничен")
+        case 404:
+            print("Запрошенный ресурс не найден на сервере.")
+        case 408:
+            print("Сервер ожидал запрос, но получил его с задержкой.")
         case _:
             print("Неизвестная ошибка")
+
+def pass_check():
+    while (True):
+        password = input("Пароль:")
+        password_confirmation = input("Подтвердите пароль:")
+    
+        if password != password_confirmation: 
+            print("Пароли не совпадают")
+            continue
+
+        if len(password) < 10:
+            print("Пароль должен содержать не менее 10 символов")
+            continue
+    
+        if not re.search(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&#_])', password):
+            print("Пароль должен содержать:")
+            print("Cтрочные буквы (a–z)")
+            print("Заглавные буквы (A–Z)")
+            print("Цифры (0–9)")
+            print("Спецсимволы: @$!%*?&#_")
+            continue
+    
+        print("Пароль принят!")
+        return password
+
     
 
 

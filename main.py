@@ -69,6 +69,13 @@ def all_times(request: Request):
 
 @app.post("/users/")
 def create_user(user: User):
+   json_files_names = [file for file in os.listdir("users/") if file.endswith(".json")]
+   for json_file_name in json_files_names:
+        file_path = os.path.join("users/", json_file_name)
+        with open(file_path, "r") as f:
+                openfiles = json.load(f)
+                if openfiles.get("login") == user.login:
+                    raise HTTPException(status_code=409, detail="Такой логин уже есть!")
    user.id = int(time.time())
    user.token = str(random.getrandbits(128))
 
@@ -87,3 +94,4 @@ def create_user(params: AuthUser):
             user = User(**json_item)
             if user.login == params.login and user.password == params.password:
                 return {"Login": user.login, "Token": user.token}
+    raise HTTPException(status_code=401, detail="Неправльный логин или пароль")
