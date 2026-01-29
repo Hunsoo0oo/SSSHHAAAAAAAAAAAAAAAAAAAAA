@@ -13,18 +13,22 @@ CURRENT_TOKEN = None
 
 
 def send_get(url):
-    headers = {'Authorization': hashtoken({})}
+    headers = {'Authorization': hashtoken(),
+               'Time': tt
+               }
     response = requests.get(url, headers=headers) 
     return response.text, response.status_code
 
 
 def hashtoken1():
+
     global CURRENT_TOKEN
     if CURRENT_TOKEN is None:
         return ""
     sha256_hash = hashlib.new('sha256')
     sha256_hash.update(CURRENT_TOKEN.encode('utf-8'))
     return sha256_hash.hexdigest()
+
 
 
 def hashtoken2():
@@ -37,13 +41,24 @@ def hashtoken2():
     return sha256_hash.hexdigest()
 
 
-def hashtoken(body):
+def hashtoken3(body= None):
     global CURRENT_TOKEN
     if CURRENT_TOKEN is None:
         return ""
     body_json = json.dumps(body, separators=(",", ":"), sort_keys=True)
     tokenbody= CURRENT_TOKEN + body_json
     return hashlib.sha256(tokenbody.encode()).hexdigest()
+
+
+def hashtoken(body= None):
+    global CURRENT_TOKEN
+    if CURRENT_TOKEN is None:
+        return ""
+    tt = str(int(time.time()))
+    body_json = json.dumps(body, separators=(",", ":"), sort_keys=True)
+    data = CURRENT_TOKEN + body_json + tt
+    return hashlib.sha256(data.encode()).hexdigest()
+
 
 
 def reg_user():
@@ -69,11 +84,13 @@ def auth_user():
     if response.status_code == 200:
         data = response.json()
         CURRENT_TOKEN = data["Token"]
-        print("Авторизация прошла успешно",CURRENT_TOKEN)
+        print("Авторизация прошла успешно")
+
     elif response.status_code == 401:
         print("Неверный логин или пароль")
     else:
         print(f" Ошибка {response.status_code}")
+
 
 
 def pass_check():
@@ -101,6 +118,7 @@ def pass_check():
         return password
 
 
+
 def shifratbash():
     global CURRENT_TOKEN
     if CURRENT_TOKEN is None:
@@ -110,16 +128,25 @@ def shifratbash():
     body = {"text": text}
     headers = {'Authorization': hashtoken(body)}
 
-    response = requests.post("http://127.0.0.1:8000/atbash", json=body, headers=headers)
-    
-    if response.status_code == 200:
-        result = response.json()["result"]
-        print(f"Результат шифрования: {result}")
-    elif response.status_code == 401:
-        print("Ошибка подписи! Неверный токен или подпись.")
-    else:
-        print(f"Ошибка сервера: {response.status_code}")
 
+    response = requests.post("http://127.0.0.1:8000/atbash", json=body, headers=headers)
+    code = response.status_code
+    match code:
+            case 200:
+                result = response.json()["result"]
+                print(f"Результат шифрования: {result}")
+            case 400:
+                print("Сервер не смог обработать запрос из-за синтаксической ошибки или неправильного формата данных.")
+            case 401:
+                print("Неверные авторизационные данные")
+            case 403:
+                print("Доступ ограничен")
+            case 404:
+                print("Запрошенный ресурс не найден на сервере.")
+            case 408:
+                print("Сервер ожидал запрос, но получил его с задержкой.")
+            case _:
+                print("Неизвестная ошибка")
 
 
 while (True):

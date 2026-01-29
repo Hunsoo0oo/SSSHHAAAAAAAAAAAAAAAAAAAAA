@@ -11,13 +11,6 @@ import hashlib
 
 app = FastAPI()
 
-class Item(BaseModel):
-    name: str
-    description: Union[str, None] = "Описание..."
-    price: float
-    id: Union[int, None] = -1
-
-
 class User(BaseModel):
     login: str
     email: str
@@ -31,23 +24,17 @@ class AuthUser(BaseModel):
     login: str
     password: str
 
+
 class AtbashRequest(BaseModel):
     text: str
 
 
-@app.get("/")
-def root_path():
-    return {"Hello": "World", "code": 744, "names":[{"name": "ivan", "surname": "ivanov"}]}
-
-
 @app.post("/atbash")
-async def atbash_endpoint(request: Request):
+async def atbash(request: Request):
     hashtoken = request.headers.get('Authorization')
     body = await request.json()
-    
     if not session(hashtoken, body):
         raise HTTPException(status_code=401, detail="Invalid signature")
-    
     text = body.get("text", "")
 
     rus_alphabet = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
@@ -75,6 +62,7 @@ async def atbash_endpoint(request: Request):
     return {"result": ''.join(result)}
 
 
+
 @app.post("/users/")
 def create_user(user: User):
    json_files_names = [file for file in os.listdir("users/") if file.endswith(".json")]
@@ -92,6 +80,8 @@ def create_user(user: User):
    return user
 
 
+
+
 @app.post("/users/auth")
 def auth_user(params: AuthUser):
     json_files_names = [file for file in os.listdir("users/") if file.endswith(".json")]
@@ -105,6 +95,9 @@ def auth_user(params: AuthUser):
     raise HTTPException(status_code=401, detail="Неправльный логин или пароль")
 
 
+
+
+
 def session(hashtoken: str,body: dict):
     json_files_names = [file for file in os.listdir("users/") if file.endswith(".json")]
     for json_file_name in json_files_names:
@@ -113,10 +106,10 @@ def session(hashtoken: str,body: dict):
             json_item = json.load(f)
             token = json_item.get("token")
             if token:
+                tt = str(int(time.time()))
                 body_json = json.dumps(body, separators=(",", ":"), sort_keys=True)
-                data = token + body_json
+                data = token + body_json + tt
                 hashcheck = hashlib.sha256(data.encode('utf-8')).hexdigest()
                 if hashcheck == hashtoken:
                     return True
     return False
-
