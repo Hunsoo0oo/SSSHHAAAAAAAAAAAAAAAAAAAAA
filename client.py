@@ -1,4 +1,4 @@
-﻿from tkinter import CURRENT
+﻿
 import requests
 import json
 from pydantic import BaseModel
@@ -13,41 +13,10 @@ CURRENT_TOKEN = None
 
 
 def send_get(url):
-    headers = {'Authorization': hashtoken(),
-               'Time': tt
-               }
+    headers = {'Authorization': hashtoken(),}
     response = requests.get(url, headers=headers) 
     return response.text, response.status_code
 
-
-def hashtoken1():
-
-    global CURRENT_TOKEN
-    if CURRENT_TOKEN is None:
-        return ""
-    sha256_hash = hashlib.new('sha256')
-    sha256_hash.update(CURRENT_TOKEN.encode('utf-8'))
-    return sha256_hash.hexdigest()
-
-
-
-def hashtoken2():
-    global CURRENT_TOKEN
-    if CURRENT_TOKEN is None:
-        return ""
-    tt = str(int(time.time()))
-    sha256_hash = hashlib.new('sha256')
-    sha256_hash.update((CURRENT_TOKEN + tt).encode('utf-8'))
-    return sha256_hash.hexdigest()
-
-
-def hashtoken3(body= None):
-    global CURRENT_TOKEN
-    if CURRENT_TOKEN is None:
-        return ""
-    body_json = json.dumps(body, separators=(",", ":"), sort_keys=True)
-    tokenbody= CURRENT_TOKEN + body_json
-    return hashlib.sha256(tokenbody.encode()).hexdigest()
 
 
 def hashtoken(body= None):
@@ -121,8 +90,9 @@ def pass_check():
 
 def shifratbash():
     global CURRENT_TOKEN
-    if CURRENT_TOKEN is None:
-        return "Авторизируйтесь"
+    if not CURRENT_TOKEN:
+        print("Авторизируйтесь")
+        return
 
     text = input("Введите текст для шифрования Атбаш: ")
     body = {"text": text}
@@ -149,10 +119,115 @@ def shifratbash():
                 print("Неизвестная ошибка")
 
 
+def view_history():
+    global CURRENT_TOKEN
+    if not CURRENT_TOKEN:
+        print(" Авторизируйтесь ")
+        return
+
+    body = {}
+    headers = {'Authorization': hashtoken(body)}
+
+    response = requests.get("http://127.0.0.1:8000/history", headers=headers)
+    if response.status_code == 200:
+        history = response.json().get("history", [])
+        if not history:
+            print("Ваша история пуста.")
+        else:
+            print("\n--- ВАША ИСТОРИЯ ЗАПРОСОВ ---")
+            for item in history:
+                print(f"[{item['time']}] | {item['action']}: | Ввод: {item['input']} | Вывод: {item['output']} |")
+            print("---------------------\n")
+    else:
+        print("Не удалось получить историю:", response.json())
+
+
+def delete_all_history():
+    global CURRENT_TOKEN
+    if not CURRENT_TOKEN:
+        print("Авторизируйтесь")
+        return
+
+    headers = {'Authorization': hashtoken({})}
+    response = requests.delete("http://127.0.0.1:8000/history", headers=headers)
+    if response.status_code == 200:
+        print("Ваша история удалена.")
+    else:
+        print("Ошибка при удалении:", response.json())
+
+
+def show_all_texts():
+    global CURRENT_TOKEN
+    if not CURRENT_TOKEN:
+        print("Авторизируйтесь")
+        return
+
+    headers = {'Authorization': hashtoken({})}
+    response = requests.get("http://127.0.0.1:8000/texts", headers=headers)
+    
+    if response.status_code == 200:
+        texts = response.json().get("texts", [])
+        if not texts:
+            print("База текстов пуста.")
+        else:
+            print("\n--- ТЕКСТЫ В БАЗЕ ---")
+            for t in texts:
+                print(f"ID: {t['id']} | {t['content']}")
+            print("--------------------\n")
+    else:
+        print("Ошибка получения данных")
+
+
+def add_text():
+    global CURRENT_TOKEN
+    if not CURRENT_TOKEN:
+        print("Авторизируйтесь")
+        return
+
+    msg = input("Введите текст для сохранения: ")
+    
+    body = {"text": msg}
+
+    headers = {'Authorization': hashtoken(body)}
+    response = requests.post("http://127.0.0.1:8000/texts", json=body, headers=headers)
+    if response.status_code == 200:
+        res = response.json()
+        print(f"Текст сохранен под номером: {res['id']}")
+    else:
+        print("Ошибка:", response.json())
+
+
+def delete_text():
+    global CURRENT_TOKEN
+    if not CURRENT_TOKEN:
+        print("Авторизируйтесь")
+        return
+    show_all_texts() 
+    
+    tid = input("Введите ID для удаления: ")
+    if not tid: return
+
+    headers = {'Authorization': hashtoken({})}
+    response = requests.delete(f"http://127.0.0.1:8000/texts/{tid}", headers=headers)
+    
+    if response.status_code == 200:
+        print("Текст успешно удален.")
+    else:
+        print("Ошибка удаления")
+
+
 while (True):
     try:
         print("Введите команду")
-        command = int(input("1 - авторизация\n2 - регистрация\n3 - Шифр Атбаш\n"))
+        print("1 - Авторизация")
+        print("2 - Регистрация")
+        print("3 - Шифр Атбаш")
+        print("4 - Просмотр истории")
+        print("5 - Очистить историю")
+        print("6 - Сохранить текст в базу")
+        print("7 - Показать все тексты")
+        print("8 - Удалить текст")
+        command = int(input("Введите команду:"))
         match command:
             case 1:
                 auth_user()
@@ -160,6 +235,16 @@ while (True):
                 reg_user()
             case 3:
                 shifratbash()
+            case 4:
+                view_history()
+            case 5:
+                delete_all_history()
+            case 6:
+                add_text()
+            case 7:
+                show_all_texts()
+            case 8:
+                delete_text()
             case _:
                 break
     except ValueError:
