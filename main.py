@@ -37,19 +37,31 @@ async def atbash(request: Request):
     body = await request.json()
 
     result_session = session(hashtoken, body)
-
     if not result_session:
-        raise HTTPException(status_code=401, detail="Неправльный логин или пароль")
-    
+        raise HTTPException(status_code=401, detail="Неправльный данные")
+
     user_data, file_path = result_session
-    
-    text = body.get("text", "")
+    text = str(body.get("text", ""))
+    if not text:
+        raise HTTPException(status_code=400, detail="Текст для шифрования не может быть пустым")
+    text_to_process = text 
+    target_text_obj = None
+    is_id_input = False
+
+    if text.isdigit():
+        item_id = int(text)
+        for t in user_data.get("texts", []):
+            if int(t.get("id", 0)) == item_id:
+                text_to_process = t["content"]
+                target_text_obj = t
+                is_id_input = True
+                break
 
     rus_alphabet = "абвгдеёжзийклмнопрстуфхцчшщъыьэюя"
     eng_alphabet = "abcdefghijklmnopqrstuvwxyz"
     
     result_char = []
-    for char in text:
+    for char in text_to_process:
         if char.lower() in rus_alphabet:
             alphabet = rus_alphabet
             minion = char.lower()
@@ -69,9 +81,23 @@ async def atbash(request: Request):
     
     final_result = ''.join(result_char)
 
+    if is_id_input and target_text_obj:
+        target_text_obj["content"] = final_result
+        action_name = "atbash_update_by_id"
+    else:
+        if "texts" not in user_data:
+            user_data["texts"] = []
+        
+        new_entry = {
+            "id": int(time.time()),
+            "content": final_result,
+            "created_at": time.ctime()
+        }
+        user_data["texts"].append(new_entry)
+        action_name = "atbash_encrypt_and_save"
+
     if "history" not in user_data:
         user_data["history"] = []
-
     user_data["history"].append({
         "action": "atbash_encryption",
         "input": text,
@@ -91,7 +117,7 @@ async def get_history(request: Request):
     
     result_session = session(hashtoken, {}) 
     if not result_session:
-        raise HTTPException(status_code=401, detail="Неправльный логин или пароль")
+        raise HTTPException(status_code=401, detail="Неправльный данные")
     user_data, file_path = result_session
     
     return {"history": user_data.get("history", [])}
@@ -104,7 +130,7 @@ async def clear_history(request: Request):
     
     result_session = session(hashtoken, {})
     if not result_session:
-        raise HTTPException(status_code=401, detail="Неправльный логин или пароль")
+        raise HTTPException(status_code=401, detail="Неправльный данные")
     user_data, file_path = result_session
     
     user_data["history"] = []
@@ -119,24 +145,11 @@ async def get_all_texts(request: Request):
     hashtoken = request.headers.get('Authorization')
     result_session = session(hashtoken, {})
     if not result_session:
-        raise HTTPException(status_code=401, detail="Неверный логин или пароль")
+        raise HTTPException(status_code=401, detail="Неправльный данные")
     
     user_data, _ = result_session
     return {"texts": user_data.get("texts", [])}
 
-
-@app.get("/texts/{item_id}")
-async def get_text(item_id: int, request: Request):
-    hashtoken = request.headers.get('Authorization')
-    result_session = session(hashtoken, {})
-    if not result_session:
-        raise HTTPException(status_code=401)
-    
-    user_data, _ = result_session
-    for t in user_data.get("texts", []):
-        if t["id"] == item_id:
-            return t
-    raise HTTPException(status_code=404, detail="Текст не найден")
 
 
 @app.delete("/texts/{item_id}")
@@ -176,7 +189,7 @@ async def add_text(request: Request):
     
     result_session = session(hashtoken, body)
     if not result_session:
-        raise HTTPException(status_code=401, detail="Неправльный логин или пароль")
+        raise HTTPException(status_code=401, detail="Неправльный данные")
     user_data, file_path = result_session
     
     new_text = body.get("text", "")
@@ -208,12 +221,46 @@ async def add_text(request: Request):
     return {"id": text["id"]}
 
 
+@app.patch("/texts/{item_id}")
+async def update_text(item_id: int, request: Request):
+    hashtoken = request.headers.get('Authorization')
+    body = await request.json()
+    
+    result_session = session(hashtoken, body)
+    if not result_session:
+        raise HTTPException(status_code=401)
+        
+    user_data, file_path = result_session
+    new_content = body.get("text", "")
+    
+    found = False
+    for t in user_data.get("texts", []):
+        if int(t["id"]) == item_id:
+            t["content"] = new_content
+            found = True
+            break
+            
+    if not found:
+        raise HTTPException(status_code=404, detail="Текст не найден")
+
+    user_data["history"].append({
+        "action": "edit_text",
+        "input": f"ID: {item_id}",
+        "output": f"New content: {new_content}",
+        "time": time.ctime()
+    })
+
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(user_data, f, ensure_ascii=False)
+    return True
+
+
 @app.post("/users/")
 def create_user(user: User):
    json_files_names = [file for file in os.listdir("users/") if file.endswith(".json")]
    for json_file_name in json_files_names:
         file_path = os.path.join("users/", json_file_name)
-        with open(file_path, "r") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
                 openfiles = json.load(f)
                 if openfiles.get("login") == user.login:
                     raise HTTPException(status_code=409, detail="Такой логин уже есть!")
@@ -225,41 +272,64 @@ def create_user(user: User):
    return user
 
 
-
+active_sessions = {}
 
 @app.post("/users/auth")
 def auth_user(params: AuthUser):
     json_files_names = [file for file in os.listdir("users/") if file.endswith(".json")]
     for json_file_name in json_files_names:
         file_path = os.path.join("users/", json_file_name)
-        with open(file_path, "r") as f:
+        with open(file_path, "r", encoding="utf-8") as f:
             json_item = json.load(f)
             user = User(**json_item)
             if user.login == params.login and user.password == params.password:
+                ttoken = user.token
                 session_seed = f"{user.token}{time.time()}"
                 session_token = hashlib.sha256(session_seed.encode()).hexdigest()
-                user.token = session_token
-                with open(file_path, "w", encoding="utf-8") as f:
-                    json.dump(user.model_dump(), f, ensure_ascii=False)
-                return {"Login": user.login, "Token": user.token}
-    raise HTTPException(status_code=401, detail="Неправльный логин или пароль")
+                active_sessions[session_token] = user.login
+                return {"Login": user.login, "Token": session_token, "TToken": ttoken }
+    raise HTTPException(status_code=401, detail="Неправльный данные")
 
 
+@app.patch("/users/password")
+async def change_password(request: Request):
+    hashtoken_val = request.headers.get('Authorization')
+    body = await request.json()
+    
+    result_session = session(hashtoken_val, body)
+    if not result_session:
+        raise HTTPException(status_code=401)
+        
+    user_data, file_path = result_session
+    user_data["password"] = body.get("new_password")
+    user_data["token"] = str(random.getrandbits(128)) 
+
+    user_data["history"].append({
+        "action": "change_password",
+        "input": "[********]",
+        "output": "Succesfull",
+        "time": time.ctime()
+    })
+    
+    with open(file_path, "w", encoding="utf-8") as f:
+        json.dump(user_data, f, ensure_ascii=False)
+    return True
 
 
-
-def session(hashtoken: str,body: dict):
+def session(hashtoken: str, body: dict):
     tt = str(int(time.time()))
-    json_files_names = [file for file in os.listdir("users/") if file.endswith(".json")]
-    for json_file_name in json_files_names:
-        file_path = os.path.join("users/", json_file_name)
-        with open(file_path, "r", encoding="utf-8") as f:
-            json_item = json.load(f)
-            token = json_item.get("token")
-            if token:
-                body_json = json.dumps(body, separators=(",", ":"), sort_keys=True)
-                data = token + body_json + tt
-                hashcheck = hashlib.sha256(data.encode('utf-8')).hexdigest()
-                if hashcheck == hashtoken:
-                    return json_item, file_path
+    for s_token, login in active_sessions.items():
+        body_json = json.dumps(body, separators=(",", ":"), sort_keys=True)
+        data = s_token + body_json + tt
+        hashcheck = hashlib.sha256(data.encode('utf-8')).hexdigest()
+        
+        if hashcheck == hashtoken:
+            json_files_names = [file for file in os.listdir("users/") if file.endswith(".json")]
+            for json_file_name in json_files_names:
+                file_path = os.path.join("users/", json_file_name)
+                with open(file_path, "r", encoding="utf-8") as f:
+                    json_item = json.load(f)
+                    if json_item.get("login") == login:
+                        return json_item, file_path
+                        
     return None, None

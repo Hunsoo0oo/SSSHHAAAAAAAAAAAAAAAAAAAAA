@@ -52,14 +52,32 @@ def auth_user():
     response = requests.post("http://127.0.0.1:8000/users/auth", json=user)
     if response.status_code == 200:
         data = response.json()
+        ttoken = data.get("TToken")
         CURRENT_TOKEN = data["Token"]
         print("Авторизация прошла успешно")
+        print(f"Сессионный токен: {data['Token']}")
+        print(f"Технический токен {ttoken}")
 
     elif response.status_code == 401:
         print("Неверный логин или пароль")
     else:
         print(f" Ошибка {response.status_code}")
 
+
+def update_password():
+    global CURRENT_TOKEN
+    print("--- СМЕНА ПАРОЛЯ ---")
+    new_pass = pass_check()
+    
+    body = {"new_password": new_pass}
+    headers = {'Authorization': hashtoken(body)}
+    response = requests.patch("http://127.0.0.1:8000/users/password", json=body, headers=headers)
+    
+    if response.status_code == 200:
+        print("Пароль изменен! Пожалуйста, авторизуйтесь заново.")
+        CURRENT_TOKEN = None 
+    else:
+        print("Ошибка смены пароля")
 
 
 def pass_check():
@@ -94,7 +112,7 @@ def shifratbash():
         print("Авторизируйтесь")
         return
 
-    text = input("Введите текст для шифрования Атбаш: ")
+    text = input("Введите текст для шифрования или ID: ")
     body = {"text": text}
     headers = {'Authorization': hashtoken(body)}
 
@@ -103,8 +121,8 @@ def shifratbash():
     code = response.status_code
     match code:
             case 200:
-                result = response.json()["result"]
-                print(f"Результат шифрования: {result}")
+                final_result = response.json()["result"]
+                print(f"Результат шифрования: {final_result}")
             case 400:
                 print("Сервер не смог обработать запрос из-за синтаксической ошибки или неправильного формата данных.")
             case 401:
@@ -216,36 +234,63 @@ def delete_text():
         print("Ошибка удаления")
 
 
+def edit_text():
+    global CURRENT_TOKEN
+    if not CURRENT_TOKEN:
+        print("Авторизируйтесь")
+        return
+    show_all_texts()
+    tid = input("Введите ID текста для редактирования: ")
+    new_msg = input("Введите новый текст: ")
+    
+    body = {"text": new_msg}
+    headers = {'Authorization': hashtoken(body)}
+    response = requests.patch(f"http://127.0.0.1:8000/texts/{tid}", json=body, headers=headers)
+    
+    if response.status_code == 200:
+        print("Текст успешно обновлен!")
+    else:
+        print("Ошибка обновления")
+
+
+
 while (True):
     try:
         print("Введите команду")
-        print("1 - Авторизация")
-        print("2 - Регистрация")
-        print("3 - Шифр Атбаш")
-        print("4 - Просмотр истории")
-        print("5 - Очистить историю")
-        print("6 - Сохранить текст в базу")
-        print("7 - Показать все тексты")
-        print("8 - Удалить текст")
+        print("1 - Регистрация")
+        print("2 - Авторизация")
+        print("3 - Сменить пароль")
+        print("4 - Шифр Атбаш")
+        print("5 - Сохранить текст в базу")
+        print("6 - Удалить текст")
+        print("7 - Изменить текст")
+        print("8 - Показать все тексты")
+        print("9 - Просмотр истории")
+        print("10 - Очистить историю")
+        print("11 - Выход")
         command = int(input("Введите команду:"))
         match command:
             case 1:
-                auth_user()
-            case 2:
                 reg_user()
+            case 2:
+                auth_user()
             case 3:
-                shifratbash()
+                update_password()
             case 4:
-                view_history()
+                shifratbash()
             case 5:
-                delete_all_history()
-            case 6:
                 add_text()
-            case 7:
-                show_all_texts()
-            case 8:
+            case 6:
                 delete_text()
-            case _:
+            case 7:
+                edit_text()
+            case 8:
+                show_all_texts()
+            case 9:
+                view_history()
+            case 10:
+                delete_all_history()
+            case 11:
                 break
     except ValueError:
         print("Неверно")
